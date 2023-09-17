@@ -1,34 +1,154 @@
 """
 Tässä tiedostossa on pohja shakkikoneen kouluttamiselle. Nykyinen versio
-etsii parasta versiota evolutiivisesti, mutta parametrien muodostaminen
-saattaa vaatia myös manuaalisia muutoksia. Koulutus on toistaiseksi
-merkittävän hidasta.
+mahdollistaa datan muodostamisen.
 """
 
 from teorialauta import Teorialauta, shakkilaudan_koordinaatit
 from random import randint
 
 
-def muodosta_tiedoston_rivi(asemat, arvo):
-    """
-    Tämä funktio muotoilee rivin sellaiseksi, joita tiedostoon kirjoitetaan.
+class PuunAlkio:
+    def __init__(self, tilanne=Teorialauta.ALOITUSASEMAT, arvo=0.0):
+        """
 
-    :param asemat: {str: [str, ...]}, nappulatyypin nimi linkitettynä
-                   ruutujen listaan.
-    :param arvo: int/float, tilanteelle annettu arvo.
-    :return: str, valmis tiedoston rivi.
-    """
+        """
 
-    rivi = ""
-    for nappulatyyppi in asemat.keys():
-        for asema in asemat[nappulatyyppi]:
-            rivi += asema
-            if asema != asemat[nappulatyyppi][-1]:
-                rivi += "-"
-        rivi += ";"
+        self.edellinen = None
+        self.seuraavat = []
+        self.tilanne = tilanne
+        self.arvo = arvo
 
-    rivi += str(arvo) + "\n"
-    return rivi
+    def __str__(self):
+        asemat = self.tilanne
+        rivi = self.muodosta_sarjanumero() + ";"
+
+        for nappulatyyppi in asemat.keys():
+            for asema in asemat[nappulatyyppi]:
+                rivi += asema
+                if asema != asemat[nappulatyyppi][-1]:
+                    rivi += "-"
+            rivi += ";"
+
+        rivi += str(self.arvo) + "\n"
+        return rivi
+
+    def haara(self):
+        if not self.edellinen:
+            return 0
+
+        haara = 1
+        for alkio in self.edellinen.seuraavat:
+            if alkio == self:
+                return haara
+
+            haara += 1
+
+        return haara
+
+    def muodosta_sarjanumero(self):
+        if self.haara() == 0:
+            return "0"
+
+        sarjanumero = ""
+        alkio = self
+
+        while alkio.edellinen:
+            sarjanumero = str(alkio.haara()) + sarjanumero
+            alkio = alkio.edellinen
+            if alkio.edellinen:
+                sarjanumero = "-" + sarjanumero
+
+        return sarjanumero
+
+    def etsi_tilanne(self, tilanne):
+        juuri = self
+
+        while True:
+            if juuri.tilanne == tilanne:
+                return juuri
+
+            if juuri.seuraavat:
+                juuri = juuri.seuraavat[0]
+                continue
+
+            if not juuri.edellinen:
+                return None
+
+            if juuri == juuri.edellinen.seuraavat[-1]:
+                tarkistus = juuri
+                viimeinen = True
+
+                while tarkistus.edellinen:
+                    if tarkistus != tarkistus.edellinen.seuraavat[-1]:
+                        aiempi_haara = tarkistus.haara()
+                        juuri = tarkistus.edellinen.seuraavat[aiempi_haara]
+                        viimeinen = False
+                        break
+
+                    tarkistus = tarkistus.edellinen
+
+                if viimeinen:
+                    return None
+
+            else:
+                juuri = juuri.edellinen.seuraavat[juuri.haara()]
+
+    def lisaa_seuraava(self, tilanne, arvo):
+        uusi_alkio = PuunAlkio(tilanne, arvo)
+        uusi_alkio.edellinen = self
+        self.seuraavat.append(uusi_alkio)
+
+
+def data_tiedostosta(tiedostonimi):
+    data = PuunAlkio()
+    juuri = data
+    juuren_syvyys = 1
+
+    with open(tiedostonimi, "r") as tiedosto:
+        for rivi in tiedosto:
+
+            # Painotusrivi täytyy jättää huomioitta
+            if len(rivi.rstrip().split(";")) == 4:
+                continue
+
+            sarjanumero = rivi.rstrip().split(";")[0]
+            haarat = sarjanumero.split("-")
+            nykyinen_syvyys = len(haarat)
+
+            # Liikutaan eteepäin puussa
+            if nykyinen_syvyys > juuren_syvyys:
+                haara = int(haarat[-1])
+                juuri = juuri.seuraavat[haara-1]
+
+            # Liikutaan taaksepäin puussa
+            while nykyinen_syvyys < juuren_syvyys:
+                juuri = juuri.edellinen
+                juuren_syvyys -= 1
+
+            nappulatyypin_asemat = rivi.rstrip().split(";")[1:-1]
+            tilanne = {}
+
+            indeksi = 0
+            for sijainnit in nappulatyypin_asemat:
+                avain = list(Teorialauta.ALOITUSASEMAT.keys())[indeksi]
+                sijainnit = sijainnit.split("-")
+                tilanne.update({avain: sijainnit})
+                indeksi += 1
+
+            arvo = float(rivi.rstrip().split(";")[-1])
+
+            juuri.lisaa_seuraava(tilanne, arvo)
+
+    return data
+
+
+def tiedosto_datasta(data, tiedostonimi):
+    lisaa_rivi_tiedostoon(str(data), tiedostonimi)
+
+    if not data.seuraavat:
+        return
+    for alkio in data.seuraavat:
+        tiedosto_datasta(alkio, tiedostonimi)
 
 
 def lisaa_rivi_tiedostoon(lisattava_rivi, tiedostonimi):
@@ -46,10 +166,8 @@ def lisaa_rivi_tiedostoon(lisattava_rivi, tiedostonimi):
     with open(tiedostonimi, "r") as tiedosto:
         for tiedoston_rivi in tiedosto:
 
-            # Ensimmäinen rivi ei sisällä tietoa pelitilanteista
-            if rivinumero == 0:
-                rivit += tiedoston_rivi
-                rivinumero += 1
+            # Painotusrivi täytyy jättää huomioitta
+            if len(tiedoston_rivi.rstrip().split(";")) == 4:
                 continue
 
             # Jos lisättävä rivi on jo tiedostossa, jatkaminen on turhaa
@@ -83,6 +201,7 @@ def painotukset_tiedostosta(tiedostonimi):
     """
 
     painotukset = []
+
     with open(tiedostonimi, "r") as tiedosto:
         for tiedoston_rivi in tiedosto:
             for painotus in tiedoston_rivi.rstrip().split(";"):
@@ -90,91 +209,27 @@ def painotukset_tiedostosta(tiedostonimi):
             return painotukset
 
 
-def pelitilanteen_rivinumero_tiedostossa(pelilauta, tiedostonimi):
+def muuta_painotuksia():
     """
-    Tämä funktio etsii tiedostosta siihen kirjatun pelitilanteen rivinumeron.
-
-    :param pelilauta: Teorialauta, pelitilanne, jota etsitään.
-    :param tiedostonimi: str, avattavan tiedoston nimi.
-    :return: int/None, rivinumero.
+    Tämä funktio vaihtaa haastajatiedoston painotuksien muutoksista.
+    Muutoksen suuruutta voi kontrolloida muuttamalla jakajia ja kertojia.
     """
 
-    asemat = pelilauta.asemalistat()
-    rivinumero = 0
+    haastajan_painotukset = painotukset_tiedostosta("haastaja.txt")
+    parhaan_painotukset = painotukset_tiedostosta("paras.txt")
+    indeksi = randint(0, 3)
 
-    with open(tiedostonimi, "r") as tiedosto:
-        for rivi in tiedosto:
+    if haastajan_painotukset[indeksi] > parhaan_painotukset[indeksi]:
+        haastajan_painotukset[indeksi] -= 0.00002
 
-            # Ensimmäinen rivi ei sisällä tietoa pelitilanteista
-            if rivinumero == 0:
-                rivinumero += 1
-                continue
+    else:
+        haastajan_painotukset[indeksi] += 0.00001
 
-            nappulatyypin_asemat = rivi.rstrip().split(";")[:-1]
-
-            indeksi = 0
-            sama_asema = True
-            for sijainnit in nappulatyypin_asemat:
-                nappulatyyppi = list(asemat.keys())[indeksi]
-
-                if sijainnit.split("-") == [""] \
-                        and asemat[nappulatyyppi] == []:
-                    indeksi += 1
-                    continue
-
-                if sorted(sijainnit.split("-")) != \
-                        sorted(asemat[nappulatyyppi]):
-                    sama_asema = False
-                    break
-
-                indeksi += 1
-
-            if sama_asema:
-                return rivinumero
-
-            rivinumero += 1
-
-    return None
-
-
-def pelitilanteen_arvo_tiedostosta(pelilauta, tiedostonimi):
-    """
-    Tämä funktio etsii tiedostosta siihen kirjatun pelitilanteen arvon.
-
-    :param pelilauta: Teorialauta, pelitilanne, jota etsitään.
-    :param tiedostonimi: str, avattavan tiedoston nimi.
-    :return: int/float/None, pelitilanteen arvo.
-    """
-
-    asemat = pelilauta.asemalistat()
-
-    with open(tiedostonimi, "r") as tiedosto:
-        for rivi in tiedosto:
-            nappulatyypin_asemat = rivi.rstrip().split(";")[:-1]
-            if len(nappulatyypin_asemat) != 12:
-                continue
-
-            indeksi = 0
-            sama_asema = True
-            for sijainnit in nappulatyypin_asemat:
-                nappulatyyppi = list(asemat.keys())[indeksi]
-
-                if sijainnit.split("-") == [""] \
-                        and asemat[nappulatyyppi] == []:
-                    indeksi += 1
-                    continue
-
-                if sorted(sijainnit.split("-")) != \
-                        sorted(asemat[nappulatyyppi]):
-                    sama_asema = False
-                    break
-
-                indeksi += 1
-
-            if sama_asema:
-                return float(rivi.rstrip().split(";")[-1])
-
-    return None
+    with open("haastaja.txt", "w") as tiedosto:
+        tiedosto.write(str(haastajan_painotukset[0])+";"
+                       + str(haastajan_painotukset[1])+";"
+                       + str(haastajan_painotukset[2])+";"
+                       + str(haastajan_painotukset[3])+"\n")
 
 
 def muodosta_ruudun_arvo(pelilauta, ruutu, painotukset):
@@ -253,14 +308,16 @@ def muodosta_ruudun_arvo(pelilauta, ruutu, painotukset):
         + w3*nappulan_siirtomahdollisuudet + w4*ruudun_uhkaajat
 
 
-def muodosta_pelitilanteen_arvo(pelilauta, tiedostonimi, rekursio):
+def muodosta_pelitilanteen_arvo(pelilauta, data, painotukset, rekursio=True):
     """
     Tämä funktio muodostaa pelitilanteen arvon yksittäisten ruutujen
     perusteella. Jos rekursio on sallittuna, funktio voi kutsua
     arvioi_paras_siirto -funktiota, joka kutsuu uudelleen tätä funktiota.
 
     :param pelilauta: Teorialauta, pelitilanne, jota arvioidaan.
-    :param tiedostonimi: str, tiedosto, jonka tietoja käytetään pohjana.
+    :param data: PuunAlkio, tallennetut tiedot asemien arvoista.
+    :param painotukset: [float, ...], painotukset, joilla pelitilanteet
+                        arvioidaan.
     :param rekursio: bool, sallitaanko arvon muodostuksen rekursio.
     :return: int/float, pelitilanteen arvo lukuna.
     """
@@ -272,15 +329,13 @@ def muodosta_pelitilanteen_arvo(pelilauta, tiedostonimi, rekursio):
         return -1
 
     arvo = 0
-
-    painotukset = painotukset_tiedostosta(tiedostonimi)
     for ruutu in shakkilaudan_koordinaatit():
         arvo += muodosta_ruudun_arvo(pelilauta, ruutu, painotukset)
 
     if rekursio:
         uusi_lauta = Teorialauta()
 
-        for _ in range(0, 5):
+        for _ in range(0, 3):
             uusi_lauta = Teorialauta()
             uusi_lauta.aloita_kesken_pelin(pelilauta.siirtonumero(),
                                            pelilauta.asemalistat(),
@@ -288,18 +343,18 @@ def muodosta_pelitilanteen_arvo(pelilauta, tiedostonimi, rekursio):
 
             if uusi_lauta.siirtonumero() % 2 == 1:
                 sijainti, siirto = arvioi_paras_siirto(
-                    uusi_lauta, "valkoinen", tiedostonimi, False)
+                    uusi_lauta, "valkoinen", data, painotukset, False)
 
             else:
                 sijainti, siirto = arvioi_paras_siirto(
-                    uusi_lauta, "musta", tiedostonimi, False)
+                    uusi_lauta, "musta", data, painotukset, False)
 
             uusi_lauta.tee_siirto(sijainti, siirto)
             if uusi_lauta.tarkista_voitto() is not None:
                 break
 
-        arvo += 0.5 * muodosta_pelitilanteen_arvo(uusi_lauta, tiedostonimi,
-                                                  False)
+        arvo += 0.5 * muodosta_pelitilanteen_arvo(
+            uusi_lauta, data, painotukset, False)
 
     # Vältetään arvon menemästä yli rajan kaikissa tilanteissa
     if arvo >= 1:
@@ -311,8 +366,7 @@ def muodosta_pelitilanteen_arvo(pelilauta, tiedostonimi, rekursio):
     return round(arvo, 5)
 
 
-def arvioi_paras_siirto(pelilauta, puoli, tiedostonimi="paras.txt",
-                        rekursio=True):
+def arvioi_paras_siirto(pelilauta, puoli, data, painotukset, rekursio=True):
     """
     Tämä funktio etsii datasta parhaan siirron tulevan pelitilanteen
     arvojen perusteella. Jos sitä ei löydy, muodostaa uuden arvon.
@@ -322,7 +376,9 @@ def arvioi_paras_siirto(pelilauta, puoli, tiedostonimi="paras.txt",
 
     :param pelilauta: Teorialauta, pelitilanne, josta parasta siirtoa etsitään.
     :param puoli: str, puoli, jolla siirtäjä on.
-    :param tiedostonimi: str, tiedosto, josta parasta siirtoa etsitään.
+    :param data: PuunAlkio, tallennetut tiedot asemien arvoista.
+    :param painotukset: [float, ...], painotukset, joilla pelitilanteet
+                        arvioidaan.
     :param rekursio: bool, sallitaanko arvon muodostuksen rekursio.
     :return: str, str / None, None; ruutu, josta lähdetään ja ruutu,
              johon siirrytään.
@@ -345,16 +401,15 @@ def arvioi_paras_siirto(pelilauta, puoli, tiedostonimi="paras.txt",
                 pelilauta.liikkumistiedot())
 
             uusi_lauta.tee_siirto(asema, siirto)
-            arvo = pelitilanteen_arvo_tiedostosta(uusi_lauta, tiedostonimi)
 
-            if arvo is None:
+            arvo = None
+            tilanteen_alkio = data.etsi_tilanne(uusi_lauta.asemalistat)
+            if tilanteen_alkio:
+                arvo = tilanteen_alkio.arvo()
+
+            if not arvo:
                 arvo = muodosta_pelitilanteen_arvo(
-                    uusi_lauta, tiedostonimi, rekursio)
-
-                if rekursio:
-                    uusi_rivi = muodosta_tiedoston_rivi(
-                        uusi_lauta.asemalistat(), arvo)
-                    lisaa_rivi_tiedostoon(uusi_rivi, tiedostonimi)
+                    uusi_lauta, data, painotukset, rekursio)
 
             if puoli == "valkoinen" and arvo > paras_arvo:
                 parhaat_siirrot = [asema+"-"+siirto]
@@ -376,37 +431,62 @@ def arvioi_paras_siirto(pelilauta, puoli, tiedostonimi="paras.txt",
     return parhaat_siirrot[randint(0, len(parhaat_siirrot)-1)].split("-")
 
 
-def muuta_painotuksia():
+def muodosta_dataa(painotukset):
+    data = PuunAlkio()
+    juuri = data
+    pelilaudat = [Teorialauta()]
+    maksimisyvyys = 3
+
+    while True:
+        uudet_laudat = []
+        for pelilauta in pelilaudat:
+
+            juuri = data.etsi_tilanne(pelilauta.asemalistat())
+
+            if len(juuri.muodosta_sarjanumero().split("-")) \
+                    == maksimisyvyys:
+                continue
+
+            if pelilauta.siirtonumero() % 2 == 1:
+                siirrot = pelilauta.puolen_kaikki_siirrot("valkoinen")
+            else:
+                siirrot = pelilauta.puolen_kaikki_siirrot("musta")
+
+            for asema in siirrot:
+                for siirto in siirrot[asema]:
+                    uusi_lauta = Teorialauta()
+                    uusi_lauta.aloita_kesken_pelin(
+                        pelilauta.siirtonumero(), pelilauta.asemalistat(),
+                        pelilauta.liikkumistiedot())
+
+                    uusi_lauta.tee_siirto(asema, siirto)
+
+                    tilanne = uusi_lauta.asemalistat()
+                    arvo = muodosta_pelitilanteen_arvo(
+                        pelilauta, data, painotukset, False)
+
+                    juuri.lisaa_seuraava(tilanne, arvo)
+
+                    if not uusi_lauta.tarkista_voitto():
+                        uudet_laudat.append(uusi_lauta)
+
+        if len(juuri.muodosta_sarjanumero().split("-")) \
+                == maksimisyvyys:
+            return data
+        pelilaudat = uudet_laudat
+
+
+def evolutiivinen_kehittyminen():
     """
-    Tämä funktio vaihtaa haastajatiedoston painotuksien muutoksista.
-    Muutoksen suuruutta voi kontrolloida muuttamalla jakajia ja kertojia.
+    Tömä funktio vastaa tiedostojen evolutiivisesta kehittämisestä.
+    TODO: Päivitä funktion toiminta vastaamaan uutta datarakennetta.
     """
 
-    haastajan_painotukset = painotukset_tiedostosta("haastaja.txt")
+    # Avataan tiedostot
+    parhaan_data = data_tiedostosta("paras.txt")
     parhaan_painotukset = painotukset_tiedostosta("paras.txt")
-    indeksi = randint(0, 3)
-
-    if haastajan_painotukset[indeksi] > parhaan_painotukset[indeksi]:
-        haastajan_painotukset[indeksi] = round(haastajan_painotukset[indeksi]
-                                               / 5, 5)
-
-    else:
-        haastajan_painotukset[indeksi] = round(haastajan_painotukset[indeksi]
-                                               * 2, 5)
-
-    with open("haastaja.txt", "w") as tiedosto:
-        tiedosto.write(str(haastajan_painotukset[0])+";"
-                       + str(haastajan_painotukset[1])+";"
-                       + str(haastajan_painotukset[2])+";"
-                       + str(haastajan_painotukset[3])+"\n")
-
-
-def koulutuspelit():
-    """
-    Tömä funktio vastaa tiedostojen evolutiivisesta testaamisesta.
-    Koulutusta voi parantaa lisäämällä pelimääriä ja pyörittämällä useita
-    koulutuspelejä.
-    """
+    haastajan_data = data_tiedostosta("haastaja.txt")
+    haastajan_painotukset = painotukset_tiedostosta("haastaja.txt")
 
     pelinumero = 1
     tilanne = 0
@@ -421,14 +501,18 @@ def koulutuspelit():
         pelilauta = Teorialauta()
 
         if pelinumero % 2 == 1:
-            valkoisen_tiedosto = "paras.txt"
-            mustan_tiedosto = "haastaja.txt"
+            valkoisen_data = parhaan_data
+            valkoisen_painotukset = parhaan_painotukset
+            mustan_data = haastajan_data
+            mustan_painotukset = haastajan_painotukset
             positiivinen_voittaja = "valkoinen"
             negatiivinen_voittaja = "musta"
 
         else:
-            valkoisen_tiedosto = "haastaja.txt"
-            mustan_tiedosto = "paras.txt"
+            valkoisen_data = haastajan_data
+            valkoisen_painotukset = haastajan_painotukset
+            mustan_data = parhaan_data
+            mustan_painotukset = parhaan_painotukset
             positiivinen_voittaja = "musta"
             negatiivinen_voittaja = "valkoinen"
 
@@ -442,10 +526,11 @@ def koulutuspelit():
 
             if pelilauta.siirtonumero() % 2 != 0:
                 sijainti, siirto = arvioi_paras_siirto(
-                    pelilauta, "valkoinen", valkoisen_tiedosto)
+                    pelilauta, "valkoinen", valkoisen_data,
+                    valkoisen_painotukset)
             else:
                 sijainti, siirto = arvioi_paras_siirto(
-                    pelilauta, "musta", mustan_tiedosto)
+                    pelilauta, "musta", mustan_data, mustan_painotukset)
 
             pelilauta.tee_siirto(sijainti, siirto)
 
@@ -463,7 +548,7 @@ def koulutuspelit():
         print("Pelitilanne:", tilanne)
 
     # Korvaa paras haastajalla
-    if tilanne < 0:
+    if tilanne <= -5:
         with open("haastaja.txt", "r") as haastaja:
             with open("paras.txt", "w") as paras:
                 for rivi in haastaja:
@@ -478,7 +563,12 @@ def koulutuspelit():
 
 
 def main():
-    koulutuspelit()
+    # paras_data = muodosta_dataa(painotukset_tiedostosta("paras.txt"))
+    # tiedosto_datasta(paras_data, "paras.txt")
+    # haastajan_data = muodosta_dataa(painotukset_tiedostosta("haastaja.txt"))
+    # tiedosto_datasta(haastajan_data, "haastaja.txt")
+    # evolutiivinen_kehittyminen()
+    pass
 
 
 if __name__ == "__main__":
