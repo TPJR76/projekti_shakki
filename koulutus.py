@@ -1,24 +1,36 @@
 """
 Tässä tiedostossa on pohja shakkikoneen kouluttamiselle. Nykyinen versio
-mahdollistaa datan muodostamisen.
+mahdollistaa puutietorakenteen muodostamisen ja tallentamisen. Teoreettinen
+toimintakyky on saavutettu, mutta algoritmien kehittämistä vaaditaan.
 """
 
 from teorialauta import Teorialauta, shakkilaudan_koordinaatit
 from random import randint
 
 
-class PuunAlkio:
+class Solmu:
     def __init__(self, tilanne=Teorialauta.ALOITUSASEMAT, arvo=0.0):
         """
-
+        Tämä on shakkipeleille soveltuva melko yleinen puutietorakenne.
+        Jokaiselle Solmulle on tallennettuna pelitilanne, sen arvo,
+        "vanhempi" eli tilanne yksi siirto aikaisemmin ja "lapset" eli
+        tilanteet yksi siirto tämän pelitilanteen jälkeen.
         """
 
-        self.edellinen = None
-        self.seuraavat = []
+        self.vanhempi = None
+        self.lapset = []
         self.tilanne = tilanne
         self.arvo = arvo
 
     def __str__(self):
+        """
+        Mahdollistaa solmun tietojen muuntamisen string-muotoon.
+        Tämä on hyödyllistä tiedoston kirjoittamisessa, mutta myös
+        testaamisessa.
+
+        :return: str, solmun tilanteen tiedot tallennettuna riviksi.
+        """
+
         asemat = self.tilanne
         rivi = self.muodosta_sarjanumero() + ";"
 
@@ -32,13 +44,22 @@ class PuunAlkio:
         rivi += str(self.arvo) + "\n"
         return rivi
 
-    def haara(self):
-        if not self.edellinen:
-            return 0
+    def alipuun_numero(self):
+        """
+        Erottaa vanhemmasta seuraavat solmut eli alipuut toisistaan
+        numeraalisesti. Alipuun numero tarkoittaa samaa, kuin indeksi
+        vanhemman lapsien listassa. Erityistapauksena täytyy erotella juuri,
+        eli solmu jolla ei ole vanhempaa.
 
-        haara = 1
-        for alkio in self.edellinen.seuraavat:
-            if alkio == self:
+        :return: int, numero alipuulle tai -1, jos solmu on juuri.
+        """
+
+        if not self.vanhempi:
+            return -1
+
+        haara = 0
+        for solmu in self.vanhempi.lapset:
+            if solmu == self:
                 return haara
 
             haara += 1
@@ -46,63 +67,105 @@ class PuunAlkio:
         return haara
 
     def muodosta_sarjanumero(self):
-        if self.haara() == 0:
-            return "0"
+        """
+        Koska puu halutaan rekonstruktoida kirjallisesta muodosta,
+        myös solmun pelitilanteen syntymäpolku eli vanhempien alipuiden
+        numeroista on oltava literaalinen kuvaus.
+
+        :return: str, vanhempien alipuiden numerot eroteltuna väliviivalla.
+        """
+
+        if self.alipuun_numero() == -1:
+            return None
 
         sarjanumero = ""
-        alkio = self
+        solmu = self
 
-        while alkio.edellinen:
-            sarjanumero = str(alkio.haara()) + sarjanumero
-            alkio = alkio.edellinen
-            if alkio.edellinen:
+        while solmu.vanhempi:
+            sarjanumero = str(solmu.alipuun_numero()) + sarjanumero
+            solmu = solmu.vanhempi
+            if solmu.vanhempi:
                 sarjanumero = "-" + sarjanumero
 
         return sarjanumero
 
     def etsi_tilanne(self, tilanne):
-        juuri = self
+        """
+        Etsii puusta pelitilannetta.
+
+        :param tilanne: {str: [str, ...]}, nappulatyypin nimi linkitettynä
+                        ruutujen listaan.
+        :return: Solmu/None, pelitilannetta vastaava solmu tai None, jos ei
+                 löydy.
+        """
+
+        # Palaa etsinnän aluksi juureen
+        solmu = self.juuri()
+
+        # Jos puu on tyhjä (eikä etsitä lähtötilannetta), haku ei onnistu
+        if solmu.tilanne != tilanne and not solmu.lapset:
+            return None
 
         while True:
-            if juuri.tilanne == tilanne:
-                return juuri
+            if solmu.tilanne == tilanne:
+                return solmu
 
-            if juuri.seuraavat:
-                juuri = juuri.seuraavat[0]
+            # Menee ensin niin syvälle, kuin ensimmäisillä lapsilla pääsee
+            if solmu.lapset:
+                solmu = solmu.lapset[0]
                 continue
 
-            if not juuri.edellinen:
+            # Siirtyy alhaalta alkaen vanhempien seuraaviin lapsiin,
+            # sitten niiden vanhempien seuraaviin lapsiin
+            viimeinen = True
+            while solmu.vanhempi:
+                if solmu != solmu.vanhempi.lapset[-1]:
+                    solmu = solmu.vanhempi.lapset[solmu.alipuun_numero()+1]
+                    viimeinen = False
+                    break
+
+                solmu = solmu.vanhempi
+
+            # Solmu oli viimeisten lapsien viimeisin lapsi, eikä hakua löytynyt
+            if viimeinen:
                 return None
 
-            if juuri == juuri.edellinen.seuraavat[-1]:
-                tarkistus = juuri
-                viimeinen = True
+    def juuri(self):
+        """
+        Palaa juureen eli solmuun, jolla ei ole vanhempia.
 
-                while tarkistus.edellinen:
-                    if tarkistus != tarkistus.edellinen.seuraavat[-1]:
-                        aiempi_haara = tarkistus.haara()
-                        juuri = tarkistus.edellinen.seuraavat[aiempi_haara]
-                        viimeinen = False
-                        break
+        :return: Solmu, juuri.
+        """
 
-                    tarkistus = tarkistus.edellinen
+        solmu = self
+        while solmu.vanhempi:
+            solmu = solmu.vanhempi
+        return solmu
 
-                if viimeinen:
-                    return None
+    def lisaa_lapsi(self, tilanne, arvo):
+        """
+        Lisää lapsen solmulle.
 
-            else:
-                juuri = juuri.edellinen.seuraavat[juuri.haara()]
+        :param tilanne: {str: [str, ...]}, nappulatyypin nimi linkitettynä
+                        ruutujen listaan.
+        :param arvo: int/float, pelitilanteen arvioitu arvo.
+        """
 
-    def lisaa_seuraava(self, tilanne, arvo):
-        uusi_alkio = PuunAlkio(tilanne, arvo)
-        uusi_alkio.edellinen = self
-        self.seuraavat.append(uusi_alkio)
+        uusi_solmu = Solmu(tilanne, arvo)
+        uusi_solmu.vanhempi = self
+        self.lapset.append(uusi_solmu)
 
 
-def data_tiedostosta(tiedostonimi):
-    data = PuunAlkio()
-    juuri = data
-    juuren_syvyys = 1
+def puu_tiedostosta(tiedostonimi):
+    """
+    Tideostoon tallennettu puu voidaan ottaa käyttöön ohjelmassa.
+
+    :param tiedostonimi: str, mihin puu on tallennettu.
+    :return: Solmu, jonka lapsista löytyy tallennetut tiedot asemien arvoista.
+    """
+
+    solmu = Solmu()
+    nykyinen_syvyys = 1
 
     with open(tiedostonimi, "r") as tiedosto:
         for rivi in tiedosto:
@@ -112,18 +175,18 @@ def data_tiedostosta(tiedostonimi):
                 continue
 
             sarjanumero = rivi.rstrip().split(";")[0]
-            haarat = sarjanumero.split("-")
-            nykyinen_syvyys = len(haarat)
+            alipuut = sarjanumero.split("-")
+            uusi_syvyys = len(alipuut)
 
             # Liikutaan eteepäin puussa
-            if nykyinen_syvyys > juuren_syvyys:
-                haara = int(haarat[-1])
-                juuri = juuri.seuraavat[haara-1]
+            if uusi_syvyys > nykyinen_syvyys:
+                solmu = solmu.lapset[int(alipuut[-1])]
+                nykyinen_syvyys += 1
 
             # Liikutaan taaksepäin puussa
-            while nykyinen_syvyys < juuren_syvyys:
-                juuri = juuri.edellinen
-                juuren_syvyys -= 1
+            while uusi_syvyys < nykyinen_syvyys:
+                solmu = solmu.vanhempi
+                nykyinen_syvyys -= 1
 
             nappulatyypin_asemat = rivi.rstrip().split(";")[1:-1]
             tilanne = {}
@@ -137,18 +200,29 @@ def data_tiedostosta(tiedostonimi):
 
             arvo = float(rivi.rstrip().split(";")[-1])
 
-            juuri.lisaa_seuraava(tilanne, arvo)
+            solmu.lisaa_lapsi(tilanne, arvo)
 
-    return data
+    return solmu.juuri()
 
 
-def tiedosto_datasta(data, tiedostonimi):
-    lisaa_rivi_tiedostoon(str(data), tiedostonimi)
+def tiedosto_puusta(puu, tiedostonimi):
+    """
+    Lisää solmun tilanteen tiedostoon ja kutsuu rekursiivisesti itseään
+    kaikille lapsille. Funktio voi olla näin yksinkertainen,
+    koska literaalinen kuvaus on määritetty jo tietorakenteessa.
 
-    if not data.seuraavat:
-        return
-    for alkio in data.seuraavat:
-        tiedosto_datasta(alkio, tiedostonimi)
+    :param puu: Solmu, jonka lapsista löytyy tallennetut tiedot asemien
+                arvoista.
+    :param tiedostonimi: str, mihin tiedostoon puu tallennetaan.
+    """
+
+    # Juuren lisääminen on turhaa
+    if puu.juuri() != puu:
+        lisaa_rivi_tiedostoon(str(puu), tiedostonimi)
+
+    if puu.lapset:
+        for lapsi in puu.lapset:
+            tiedosto_puusta(lapsi, tiedostonimi)
 
 
 def lisaa_rivi_tiedostoon(lisattava_rivi, tiedostonimi):
@@ -231,6 +305,8 @@ def muuta_painotuksia():
                        + str(haastajan_painotukset[2])+";"
                        + str(haastajan_painotukset[3])+"\n")
 
+    tiedosto_puusta(muodosta_puu(haastajan_painotukset), "haastaja.txt")
+
 
 def muodosta_ruudun_arvo(pelilauta, ruutu, painotukset):
     """
@@ -308,14 +384,15 @@ def muodosta_ruudun_arvo(pelilauta, ruutu, painotukset):
         + w3*nappulan_siirtomahdollisuudet + w4*ruudun_uhkaajat
 
 
-def muodosta_pelitilanteen_arvo(pelilauta, data, painotukset, rekursio=True):
+def muodosta_pelitilanteen_arvo(pelilauta, puu, painotukset, rekursio=True):
     """
     Tämä funktio muodostaa pelitilanteen arvon yksittäisten ruutujen
     perusteella. Jos rekursio on sallittuna, funktio voi kutsua
     arvioi_paras_siirto -funktiota, joka kutsuu uudelleen tätä funktiota.
 
     :param pelilauta: Teorialauta, pelitilanne, jota arvioidaan.
-    :param data: PuunAlkio, tallennetut tiedot asemien arvoista.
+    :param puu: Solmu, jonka lapsista löytyy tallennetut tiedot asemien
+                arvoista.
     :param painotukset: [float, ...], painotukset, joilla pelitilanteet
                         arvioidaan.
     :param rekursio: bool, sallitaanko arvon muodostuksen rekursio.
@@ -343,18 +420,18 @@ def muodosta_pelitilanteen_arvo(pelilauta, data, painotukset, rekursio=True):
 
             if uusi_lauta.siirtonumero() % 2 == 1:
                 sijainti, siirto = arvioi_paras_siirto(
-                    uusi_lauta, "valkoinen", data, painotukset, False)
+                    uusi_lauta, "valkoinen", puu, painotukset, False)
 
             else:
                 sijainti, siirto = arvioi_paras_siirto(
-                    uusi_lauta, "musta", data, painotukset, False)
+                    uusi_lauta, "musta", puu, painotukset, False)
 
             uusi_lauta.tee_siirto(sijainti, siirto)
             if uusi_lauta.tarkista_voitto() is not None:
                 break
 
         arvo += 0.5 * muodosta_pelitilanteen_arvo(
-            uusi_lauta, data, painotukset, False)
+            uusi_lauta, puu, painotukset, False)
 
     # Vältetään arvon menemästä yli rajan kaikissa tilanteissa
     if arvo >= 1:
@@ -366,9 +443,9 @@ def muodosta_pelitilanteen_arvo(pelilauta, data, painotukset, rekursio=True):
     return round(arvo, 5)
 
 
-def arvioi_paras_siirto(pelilauta, puoli, data, painotukset, rekursio=True):
+def arvioi_paras_siirto(pelilauta, puoli, puu, painotukset, rekursio=True):
     """
-    Tämä funktio etsii datasta parhaan siirron tulevan pelitilanteen
+    Tämä funktio etsii puusta parhaan siirron tulevan pelitilanteen
     arvojen perusteella. Jos sitä ei löydy, muodostaa uuden arvon.
     Tallentaa tulevat arvot huomioiden lasketut arvot tiedostoon.
     Tämän ominaisuuden avulla myös pelaajien pelaamien otteluiden
@@ -376,7 +453,8 @@ def arvioi_paras_siirto(pelilauta, puoli, data, painotukset, rekursio=True):
 
     :param pelilauta: Teorialauta, pelitilanne, josta parasta siirtoa etsitään.
     :param puoli: str, puoli, jolla siirtäjä on.
-    :param data: PuunAlkio, tallennetut tiedot asemien arvoista.
+    :param puu: Solmu, jonka lapsista löytyy tallennetut tiedot asemien
+                arvoista.
     :param painotukset: [float, ...], painotukset, joilla pelitilanteet
                         arvioidaan.
     :param rekursio: bool, sallitaanko arvon muodostuksen rekursio.
@@ -392,35 +470,54 @@ def arvioi_paras_siirto(pelilauta, puoli, data, painotukset, rekursio=True):
     else:
         paras_arvo = 1
 
-    for asema in siirrot:
-        for siirto in siirrot[asema]:
+    for lapsi in puu.lapset:
+        arvo = lapsi.arvo
+        for nappulatyyppi in puu.tilanne:
+            indeksi = 0
+            for asema in sorted(puu.tilanne[nappulatyyppi]):
+                vasta_asema = sorted(lapsi.tilanne[nappulatyyppi])[indeksi]
 
-            uusi_lauta = Teorialauta()
-            uusi_lauta.aloita_kesken_pelin(
-                pelilauta.siirtonumero(), pelilauta.asemalistat(),
-                pelilauta.liikkumistiedot())
+                if asema != vasta_asema:
+                    sijainti = asema
+                    siirto = vasta_asema
 
-            uusi_lauta.tee_siirto(asema, siirto)
+                indeksi += 1
 
-            arvo = None
-            tilanteen_alkio = data.etsi_tilanne(uusi_lauta.asemalistat)
-            if tilanteen_alkio:
-                arvo = tilanteen_alkio.arvo()
+        if puoli == "valkoinen" and arvo > paras_arvo:
+            parhaat_siirrot = [sijainti + "-" + siirto]
+            paras_arvo = arvo
 
-            if not arvo:
+        elif puoli == "musta" and arvo < paras_arvo:
+            parhaat_siirrot = [sijainti + "-" + siirto]
+            paras_arvo = arvo
+
+        if arvo == paras_arvo:
+            parhaat_siirrot.append(sijainti + "-" + siirto)
+
+    if not parhaat_siirrot:
+        for asema in siirrot:
+            for siirto in siirrot[asema]:
+
+                uusi_lauta = Teorialauta()
+                uusi_lauta.aloita_kesken_pelin(
+                    pelilauta.siirtonumero(), pelilauta.asemalistat(),
+                    pelilauta.liikkumistiedot())
+
+                uusi_lauta.tee_siirto(asema, siirto)
+
                 arvo = muodosta_pelitilanteen_arvo(
-                    uusi_lauta, data, painotukset, rekursio)
+                    uusi_lauta, puu, painotukset, rekursio)
 
-            if puoli == "valkoinen" and arvo > paras_arvo:
-                parhaat_siirrot = [asema+"-"+siirto]
-                paras_arvo = arvo
+                if puoli == "valkoinen" and arvo > paras_arvo:
+                    parhaat_siirrot = [asema+"-"+siirto]
+                    paras_arvo = arvo
 
-            if puoli == "musta" and arvo < paras_arvo:
-                parhaat_siirrot = [asema+"-"+siirto]
-                paras_arvo = arvo
+                if puoli == "musta" and arvo < paras_arvo:
+                    parhaat_siirrot = [asema+"-"+siirto]
+                    paras_arvo = arvo
 
-            if arvo == paras_arvo:
-                parhaat_siirrot.append(asema+"-"+siirto)
+                if arvo == paras_arvo:
+                    parhaat_siirrot.append(asema+"-"+siirto)
 
     if not parhaat_siirrot:
         return None, None
@@ -431,21 +528,30 @@ def arvioi_paras_siirto(pelilauta, puoli, data, painotukset, rekursio=True):
     return parhaat_siirrot[randint(0, len(parhaat_siirrot)-1)].split("-")
 
 
-def muodosta_dataa(painotukset):
-    data = PuunAlkio()
-    juuri = data
+def muodosta_puu(painotukset):
+    """
+    Tämä funktio on tapa muodostaa shakkitilanteiden puu teoreettisilla
+    pelilaudoilla ja niiden arvioinnilla. Maksimietäisyys määrittää, kuinka
+    monen siirron päähän arvioidaan.
+
+    :param painotukset: [float, ...], painotukset, joilla pelitilanteet
+                        arvioidaan.
+    :return: Solmu, puu, joka on muodostettu.
+    """
+
+    solmu = Solmu()
     pelilaudat = [Teorialauta()]
-    maksimisyvyys = 3
+    maksimisyvyys = 5
 
     while True:
         uudet_laudat = []
         for pelilauta in pelilaudat:
 
-            juuri = data.etsi_tilanne(pelilauta.asemalistat())
-
-            if len(juuri.muodosta_sarjanumero().split("-")) \
-                    == maksimisyvyys:
-                continue
+            solmu = solmu.etsi_tilanne(pelilauta.asemalistat())
+            if solmu.muodosta_sarjanumero():
+                if len(solmu.muodosta_sarjanumero().split("-")) >= \
+                        maksimisyvyys:
+                    continue
 
             if pelilauta.siirtonumero() % 2 == 1:
                 siirrot = pelilauta.puolen_kaikki_siirrot("valkoinen")
@@ -463,29 +569,30 @@ def muodosta_dataa(painotukset):
 
                     tilanne = uusi_lauta.asemalistat()
                     arvo = muodosta_pelitilanteen_arvo(
-                        pelilauta, data, painotukset, False)
+                        pelilauta, solmu.juuri(), painotukset, False)
 
-                    juuri.lisaa_seuraava(tilanne, arvo)
+                    solmu.lisaa_lapsi(tilanne, arvo)
 
                     if not uusi_lauta.tarkista_voitto():
                         uudet_laudat.append(uusi_lauta)
 
-        if len(juuri.muodosta_sarjanumero().split("-")) \
-                == maksimisyvyys:
-            return data
+        if solmu.muodosta_sarjanumero():
+            if len(solmu.muodosta_sarjanumero().split("-")) \
+                    == maksimisyvyys:
+                return solmu.juuri()
+
         pelilaudat = uudet_laudat
 
 
 def evolutiivinen_kehittyminen():
     """
-    Tömä funktio vastaa tiedostojen evolutiivisesta kehittämisestä.
-    TODO: Päivitä funktion toiminta vastaamaan uutta datarakennetta.
+    Tömä funktio vastaa tiedostojen kertointen evolutiivisesta kehittämisestä.
     """
 
     # Avataan tiedostot
-    parhaan_data = data_tiedostosta("paras.txt")
+    parhaan_puu = puu_tiedostosta("paras.txt")
     parhaan_painotukset = painotukset_tiedostosta("paras.txt")
-    haastajan_data = data_tiedostosta("haastaja.txt")
+    haastajan_puu = puu_tiedostosta("haastaja.txt")
     haastajan_painotukset = painotukset_tiedostosta("haastaja.txt")
 
     pelinumero = 1
@@ -501,17 +608,17 @@ def evolutiivinen_kehittyminen():
         pelilauta = Teorialauta()
 
         if pelinumero % 2 == 1:
-            valkoisen_data = parhaan_data
+            valkoisen_puu = parhaan_puu
             valkoisen_painotukset = parhaan_painotukset
-            mustan_data = haastajan_data
+            mustan_puu = haastajan_puu
             mustan_painotukset = haastajan_painotukset
             positiivinen_voittaja = "valkoinen"
             negatiivinen_voittaja = "musta"
 
         else:
-            valkoisen_data = haastajan_data
+            valkoisen_puu = haastajan_puu
             valkoisen_painotukset = haastajan_painotukset
-            mustan_data = parhaan_data
+            mustan_puu = parhaan_puu
             mustan_painotukset = parhaan_painotukset
             positiivinen_voittaja = "musta"
             negatiivinen_voittaja = "valkoinen"
@@ -526,11 +633,11 @@ def evolutiivinen_kehittyminen():
 
             if pelilauta.siirtonumero() % 2 != 0:
                 sijainti, siirto = arvioi_paras_siirto(
-                    pelilauta, "valkoinen", valkoisen_data,
+                    pelilauta, "valkoinen", valkoisen_puu,
                     valkoisen_painotukset)
             else:
                 sijainti, siirto = arvioi_paras_siirto(
-                    pelilauta, "musta", mustan_data, mustan_painotukset)
+                    pelilauta, "musta", mustan_puu, mustan_painotukset)
 
             pelilauta.tee_siirto(sijainti, siirto)
 
@@ -563,10 +670,10 @@ def evolutiivinen_kehittyminen():
 
 
 def main():
-    # paras_data = muodosta_dataa(painotukset_tiedostosta("paras.txt"))
-    # tiedosto_datasta(paras_data, "paras.txt")
-    # haastajan_data = muodosta_dataa(painotukset_tiedostosta("haastaja.txt"))
-    # tiedosto_datasta(haastajan_data, "haastaja.txt")
+    # paras_puu = muodosta_puu(painotukset_tiedostosta("paras.txt"))
+    # tiedosto_puusta(paras_puu, "paras.txt")
+    # haastajan_puu = muodosta_puu(painotukset_tiedostosta("haastaja.txt"))
+    # tiedosto_puusta(haastajan_puu, "haastaja.txt")
     # evolutiivinen_kehittyminen()
     pass
 
