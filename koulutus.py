@@ -226,6 +226,7 @@ def arvioi_paras_siirto(pelilauta, puoli, muuttujat, rekursio=True):
     siirtonumero = pelilauta.siirtonumero()
     asemat = pelilauta.asemat()
     liikkumistiedot = pelilauta.liikkumistiedot()
+    shakit = pelilauta.shakit()
 
     for asema in siirrot:
         indeksi = 0
@@ -233,7 +234,7 @@ def arvioi_paras_siirto(pelilauta, puoli, muuttujat, rekursio=True):
         while siirrot[asema]:
             if siirrot[asema] & 1:
                 uusi_lauta = Teorialauta(siirtonumero, asemat,
-                                         liikkumistiedot)
+                                         liikkumistiedot, shakit)
 
                 uusi_lauta.tee_siirto(asema, indeksi)
 
