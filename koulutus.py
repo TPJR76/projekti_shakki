@@ -190,12 +190,12 @@ def muodosta_pelitilanteen_arvo(pelilauta, muuttujat, rekursio=True):
 
     # Vältetään arvon menemästä yli rajan kaikissa tilanteissa
     if arvo >= 1:
-        return 0.99999
+        return 0.99999999
 
     if arvo <= -1:
-        return -0.99999
+        return -0.99999999
 
-    return round(arvo, 5)
+    return round(arvo, 8)
 
 
 def arvioi_paras_siirto(pelilauta, puoli, muuttujat, rekursio=True):
@@ -279,10 +279,10 @@ def alusta_muuttujat(tiedostonimi):
     # Arvon muodostus on suunniteltu siten,
     # että kertoimien ei kuulu olla negatiivisia
     for _ in range(0, 5):
-        rivi += "{:.5f};".format(randint(5, 1000)*0.00001)
+        rivi += "{:.8f};".format(randint(5, 1000)*0.00000001)
 
     for _ in range(5, 10):
-        rivi += "{:.5f};".format(randint(-100, 100)*0.00001)
+        rivi += "{:.8f};".format(randint(-100, 100)*0.00000001)
 
     with open(tiedostonimi, "w") as tiedosto:
         tiedosto.write(rivi)
@@ -400,8 +400,8 @@ def koulutus():
 
                     # jos kerroin menisi nollaan, sillä ei ole tapaa enää
                     # muuttua
-                    if muuttujat[0][i] < 0.00001:
-                        muuttujat[0][i] += 0.00005
+                    if muuttujat[0][i] < 0.00000001:
+                        muuttujat[0][i] += 0.00000005
 
                     # jos virhe on yli 1, arviointi suosii liikaa jompaa
                     # kumpaa puolta, mitä voi kontrolloida vinoumilla
@@ -419,24 +419,24 @@ def koulutus():
                                                 * muuttujat[1][i] * virhe)
 
                         # vinouma ei voi muuttaa etumerkkiään ilman tätä
-                        if muuttujat[1][i] > -0.00005:
-                            if muuttujat[1][i] < -0.00001:
+                        if muuttujat[1][i] > -0.00000005:
+                            if muuttujat[1][i] < -0.00000001:
                                 muuttujat[1][i] = -muuttujat[1][i]
 
                             elif muuttujat[1][i] <= 0:
-                                muuttujat[1][i] = 0.00005
+                                muuttujat[1][i] = 0.00000005
 
-                            elif muuttujat[1][i] < 0.00001:
-                                muuttujat[1][i] = -0.00005
+                            elif muuttujat[1][i] < 0.00000001:
+                                muuttujat[1][i] = -0.00000005
 
-                            elif muuttujat[1][i] < 0.00005:
+                            elif muuttujat[1][i] < 0.00000005:
                                 muuttujat[1][i] = -muuttujat[1][i]
 
                 edellinen_virhe = virhe
 
                 rivi = ""
                 for muuttuja in (muuttujat[0]+muuttujat[1]):
-                    rivi += "{:.5f};".format(muuttuja)
+                    rivi += "{:.8f};".format(muuttuja)
 
                 with open(tiedostonimi, "w") as tiedosto:
                     tiedosto.write(rivi)
