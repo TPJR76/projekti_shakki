@@ -215,11 +215,11 @@ class Teorialauta:
             self.__mustan_oikea_reitti_uhattuna, \
             self.__mustan_kuningas_lahtoasemassa
 
-    def shakissa(self):
+    def shakit(self):
         """
         Apufunktio, joka palauttaa tiedon shakkitilanteesta.
 
-        return: bool, onko kuningas shakissa.
+        return: bool, bool, onko kuninkaat shakissa.
         """
 
         return self.__valkoinen_shakissa, self.__musta_shakissa
@@ -853,7 +853,7 @@ class Teorialauta:
 
                 uusi_lauta = Teorialauta(self.__siirtonumero, self.__asemat,
                                          self.liikkumistiedot(),
-                                         self.shakissa())
+                                         self.shakit())
                 uusi_lauta.tee_siirto(asema, indeksi)
 
                 if (valkoisen_siirto and uusi_lauta.__valkoinen_shakissa) or \

@@ -365,7 +365,7 @@ class Shakkilauta:
                 self.nayta_siirrot(tieto1, tieto2))
 
         # Merkataan shakissa oleva kuningas punaisella
-        shakit = self.__pelilauta.shakissa()
+        shakit = self.__pelilauta.shakit()
         if shakit[0]:
             self.__ruudut_nappeina[
                 self.__pelilauta.asemat()[5].bit_length() - 1] \
