@@ -44,7 +44,8 @@ def muuttujat_tiedostosta(tiedostonimi):
     return None
 
 
-def muodosta_ruudun_arvo(pelilauta, ruutu, muuttujat):
+def muodosta_ruudun_arvo(pelilauta, ruutu, muuttujat, puolten_kaikki_siirrot,
+                         asemat):
     """
     Tämä funktio muodostaa yhden ruudun arvon. Tässä versiossa se ottaa
     huomioon nappulan arvon, nappulan etäisyyden keskustasta, nappulan
@@ -55,10 +56,14 @@ def muodosta_ruudun_arvo(pelilauta, ruutu, muuttujat):
     :param ruutu: str, pelilaudan koordinaatti.
     :param muuttujat: [float, ...], [float, ...]; listat painotuksista ja
                       vinoumista.
+    :param puolten_kaikki_siirrot: {int: int, ...}, {int: int, ...};
+                                    sanakirjat, joissa lähtöindeksit
+                                    on linkitetty nappulan
+                                    siirtomahdollisuuksien bittilautaan.
+    :param asemat: [int, ...], pelilaudan tilanne kuvattuna nappulatyyppien
+                   sijaintien bittilautoina.
     :return: int/float, yhden ruudun arvo pelitilanteessa.
     """
-
-    asemat = pelilauta.asemat()
 
     # Nappulan arvo ja etäisyys
     nappuloiden_arvot = [1, 5, 3, 3, 9, 0, -1, -5, -3, -3, -9, 0]
@@ -68,9 +73,7 @@ def muodosta_ruudun_arvo(pelilauta, ruutu, muuttujat):
     nappulan_siirtomahdollisuudet = 0
     shakissa = 0
 
-    for i in range(0, 13):
-        if i == 12:
-            break
+    for i in range(0, 12):
 
         if asemat[i] >> ruutu & 1 == 1:
             nappulan_arvo = nappuloiden_arvot[i]
@@ -104,8 +107,8 @@ def muodosta_ruudun_arvo(pelilauta, ruutu, muuttujat):
             break
 
     # Ruudun uhkaajat
-    valkoisen_siirrot = pelilauta.puolen_kaikki_siirrot("valkoinen")
-    mustan_siirrot = pelilauta.puolen_kaikki_siirrot("musta")
+    valkoisen_siirrot = puolten_kaikki_siirrot[0]
+    mustan_siirrot = puolten_kaikki_siirrot[1]
 
     ruudun_uhkaajat = 0
     for avain in valkoisen_siirrot:
@@ -150,9 +153,15 @@ def muodosta_pelitilanteen_arvo(pelilauta, muuttujat, rekursio=True):
     if voittaja == "musta":
         return -1
 
+    puolten_kaikki_siirrot = (pelilauta.puolen_kaikki_siirrot("valkoinen"),
+                              pelilauta.puolen_kaikki_siirrot("musta"))
+
+    asemat = pelilauta.asemat()
+
     arvo = 0
     for indeksi in range(0, 64):
-        arvo += muodosta_ruudun_arvo(pelilauta, indeksi, muuttujat)
+        arvo += muodosta_ruudun_arvo(pelilauta, indeksi, muuttujat,
+                                     puolten_kaikki_siirrot, asemat)
 
     if rekursio:
         uusi_arvo = 0
@@ -160,7 +169,8 @@ def muodosta_pelitilanteen_arvo(pelilauta, muuttujat, rekursio=True):
         for _ in range(0, ARVIOINNIN_MAKSIMISYVYYS):
             uusi_lauta = Teorialauta(pelilauta.siirtonumero(),
                                      pelilauta.asemat(),
-                                     pelilauta.liikkumistiedot())
+                                     pelilauta.liikkumistiedot(),
+                                     pelilauta.shakit())
 
             if uusi_lauta.siirtonumero() % 2 == 1:
                 sijainti, siirto, uusi_arvo = arvioi_paras_siirto(
@@ -173,6 +183,8 @@ def muodosta_pelitilanteen_arvo(pelilauta, muuttujat, rekursio=True):
             uusi_lauta.tee_siirto(sijainti, siirto)
             if uusi_lauta.voittaja() is not None:
                 break
+
+            pelilauta = uusi_lauta
 
         arvo += 0.5 * uusi_arvo
 
@@ -264,7 +276,12 @@ def alusta_muuttujat(tiedostonimi):
     """
 
     rivi = ""
-    for _ in range(0, 10):
+    # Arvon muodostus on suunniteltu siten,
+    # että kertoimien ei kuulu olla negatiivisia
+    for _ in range(0, 5):
+        rivi += "{:.5f};".format(randint(5, 1000)*0.00001)
+
+    for _ in range(5, 10):
         rivi += "{:.5f};".format(randint(-100, 100)*0.00001)
 
     with open(tiedostonimi, "w") as tiedosto:
@@ -381,19 +398,10 @@ def koulutus():
                     muuttujat[0][i] += (suunta * OPPIMISNOPEUS
                                         * muuttujat[0][i] * virhe)
 
-                    # muuttujan ei ole tarkoitus supeta nollaan
-                    if muuttujat[0][i] > -0.00005:
-                        if muuttujat[0][i] < -0.00001:
-                            muuttujat[0][i] = -muuttujat[0][i]
-
-                        elif muuttujat[0][i] <= 0:
-                            muuttujat[0][i] = 0.00005
-
-                        elif muuttujat[0][i] < 0.00001:
-                            muuttujat[0][i] = -0.00005
-
-                        elif muuttujat[0][i] < 0.00005:
-                            muuttujat[0][i] = -muuttujat[0][i]
+                    # jos kerroin menisi nollaan, sillä ei ole tapaa enää
+                    # muuttua
+                    if muuttujat[0][i] < 0.00001:
+                        muuttujat[0][i] += 0.00005
 
                     # jos virhe on yli 1, arviointi suosii liikaa jompaa
                     # kumpaa puolta, mitä voi kontrolloida vinoumilla
@@ -410,7 +418,7 @@ def koulutus():
                             muuttujat[1][i] -= (OPPIMISNOPEUS
                                                 * muuttujat[1][i] * virhe)
 
-                        # muuttujan ei ole tarkoitus supeta nollaan
+                        # vinouma ei voi muuttaa etumerkkiään ilman tätä
                         if muuttujat[1][i] > -0.00005:
                             if muuttujat[1][i] < -0.00001:
                                 muuttujat[1][i] = -muuttujat[1][i]
