@@ -350,22 +350,30 @@ def koulutus():
                 print("Tasapeli.")
                 break
 
+            voittaja = None
+
             # Arvioidaan vuorossa olevalle puolelle paras siirto
             if siirtonumero % 2 == 1:
                 sijainti, siirto, arvo = arvioi_paras_siirto(
                     pelilauta, "valkoinen", muuttujat, False)
+
+                if not siirto:
+                    voittaja = "musta"
             else:
                 sijainti, siirto, arvo = arvioi_paras_siirto(
                     pelilauta, "musta", muuttujat, False)
 
-            # Toteutetaan paras siirto
-            pelilauta.tee_siirto(sijainti, siirto)
+                if not siirto:
+                    voittaja = "valkoinen"
 
-            # Lisätään ennustuksiin tuore ennustus
-            ennustukset.append(arvo)
+            if siirto:
+                pelilauta.tee_siirto(sijainti, siirto)
+                voittaja = pelilauta.voittaja()
 
-            # Tarkistetaan, johtiko siirto voittoon
-            voittaja = pelilauta.voittaja()
+                # Lisätään ennustuksiin uuden tilanteen ennustus
+                ennustukset.append(arvo)
+
+            # Tarkistetaan, johtiko vuoro voittoon
             if voittaja:
 
                 if voittaja == "valkoinen":
@@ -432,6 +440,11 @@ def koulutus():
 
                             elif muuttujat[1][i] < 0.00000005:
                                 muuttujat[1][i] = -muuttujat[1][i]
+
+                    # aletaan pienentämään vinoumia,
+                    # kun tarkkuus alkaa olla hyvällä mallilla
+                    elif virhe < 0.3:
+                        muuttujat[1][i] = muuttujat[1][i]/2
 
                 edellinen_virhe = virhe
 
