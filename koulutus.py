@@ -12,19 +12,19 @@ import time
 PELIEN_MAKSIMI = 100
 # Laatu paranee, jos arvioinnissa pystytään ennustamaan tulevia asemia
 ARVIOINNIN_MAKSIMISYVYYS = 3
-OPPIMISNOPEUS = 0.1
+OPPIMISNOPEUS = 0.01
 
 
 def muuttujat_tiedostosta(tiedostonimi):
     """
-    Tämä funktio kerää painotukset ja vinoumat tiedoston ensimmäiseltä riviltä.
+    Tämä funktio kerää painotukset ja vinouman tiedoston ensimmäiseltä
+    riviltä.
 
     :param tiedostonimi: str, tiedoston nimi, josta painotukset etsitään.
-    :return: [float, ...], [float, ...], painotukset ja vinoumat.
+    :return: [float, ...], painotukset ja vinouma.
     """
 
-    painotukset = []
-    vinoumat = []
+    muuttujat = []
 
     with open(tiedostonimi, "r") as tiedosto:
         for tiedoston_rivi in tiedosto:
@@ -34,35 +34,83 @@ def muuttujat_tiedostosta(tiedostonimi):
             indeksi = 0
             for luku in tiedoston_rivi.rstrip().split(";"):
                 if not luku:
-                    return painotukset, vinoumat
-                if indeksi < 5:
-                    painotukset.append(float(luku))
-                else:
-                    vinoumat.append(float(luku))
+                    return muuttujat
+
+                muuttujat.append(float(luku))
+
                 indeksi += 1
 
     return None
 
 
-def muodosta_ruudun_arvo(pelilauta, ruutu, muuttujat, puolten_kaikki_siirrot,
-                         asemat):
+def muodosta_koko_x(pelilauta, rekursio):
     """
-    Tämä funktio muodostaa yhden ruudun arvon. Tässä versiossa se ottaa
+    Tämä funktio muodostaa pelitilanteen arvon yksittäisten ruutujen
+    perusteella. Jos rekursio on sallittuna, funktio voi arvioida nykyistä
+    asemaa seuraavien tilanteiden perusteella.
+
+    :param pelilauta: Teorialauta, pelitilanne, jota arvioidaan.
+    :param rekursio: bool, sallitaanko arvon muodostuksen rekursio.
+    :return: [int, ..], yhden ruudun arvo pelitilanteessa.
+    """
+
+    puolten_kaikki_siirrot = (pelilauta.puolen_kaikki_siirrot("valkoinen"),
+                              pelilauta.puolen_kaikki_siirrot("musta"))
+
+    asemat = pelilauta.asemat()
+
+    x = [0, 0, 0, 0, 0]
+    for indeksi in range(0, 64):
+        x_lisays = muodosta_ruudun_x(pelilauta, indeksi,
+                                     puolten_kaikki_siirrot, asemat)
+        for i in range(0, 5):
+            x[i] += x_lisays[i]
+
+    if rekursio:
+        uusi_x = [0, 0, 0, 0, 0]
+
+        for _ in range(0, ARVIOINNIN_MAKSIMISYVYYS):
+            uusi_lauta = Teorialauta(pelilauta.siirtonumero(),
+                                     pelilauta.asemat(),
+                                     pelilauta.liikkumistiedot(),
+                                     pelilauta.shakit())
+
+            if uusi_lauta.siirtonumero() % 2 == 1:
+                sijainti, siirto, uusi_x = arvioi_paras_siirto(
+                    uusi_lauta, "valkoinen", False)
+
+            else:
+                sijainti, siirto, uusi_x = arvioi_paras_siirto(
+                    uusi_lauta, "musta", False)
+
+            uusi_lauta.tee_siirto(sijainti, siirto)
+            if uusi_lauta.voittaja() is not None:
+                break
+
+            pelilauta = uusi_lauta
+
+        for i in range(0, 5):
+            x[i] = 0.5 * (x[i] + uusi_x[i])
+
+    return x
+
+
+def muodosta_ruudun_x(pelilauta, ruutu, puolten_kaikki_siirrot, asemat):
+    """
+    Tämä funktio muodostaa yhden ruudun x-vektorin. Tässä versiossa se ottaa
     huomioon nappulan arvon, nappulan etäisyyden keskustasta, nappulan
     siirtomahdollisuudet, ruutua uhkaavat nappulat, ruutua puolustavat
     nappulat sekä onko kuningas shakissa.
 
     :param pelilauta: Teorialauta, pelitilanne, jota arvioidaan.
     :param ruutu: str, pelilaudan koordinaatti.
-    :param muuttujat: [float, ...], [float, ...]; listat painotuksista ja
-                      vinoumista.
     :param puolten_kaikki_siirrot: {int: int, ...}, {int: int, ...};
                                     sanakirjat, joissa lähtöindeksit
                                     on linkitetty nappulan
                                     siirtomahdollisuuksien bittilautaan.
     :param asemat: [int, ...], pelilaudan tilanne kuvattuna nappulatyyppien
                    sijaintien bittilautoina.
-    :return: int/float, yhden ruudun arvo pelitilanteessa.
+    :return: [int, ..], yhden ruudun arvo pelitilanteessa.
     """
 
     # Nappulan arvo ja etäisyys
@@ -125,68 +173,28 @@ def muodosta_ruudun_arvo(pelilauta, ruutu, muuttujat, puolten_kaikki_siirrot,
 
             ruudun_uhkaajat -= 1
 
-    w1, w2, w3, w4, w5 = muuttujat[0]
-    b1, b2, b3, b4, b5 = muuttujat[1]
-
-    return (w1*nappulan_arvo+b1 + w2*nappulan_etaisyys+b2
-            + w3*nappulan_siirtomahdollisuudet+b3 + w4*ruudun_uhkaajat+b4
-            + w5*shakissa+b5)
+    return [nappulan_arvo, nappulan_etaisyys, nappulan_siirtomahdollisuudet,
+            ruudun_uhkaajat, shakissa]
 
 
-def muodosta_pelitilanteen_arvo(pelilauta, muuttujat, rekursio=True):
+def muodosta_pelitilanteen_arvo(x, muuttujat):
     """
     Tämä funktio muodostaa pelitilanteen arvon yksittäisten ruutujen
     perusteella. Jos rekursio on sallittuna, funktio voi arvioida nykyistä
     asemaa seuraavien tilanteiden perusteella.
 
-    :param pelilauta: Teorialauta, pelitilanne, jota arvioidaan.
-    :param muuttujat: [float, ...], [float, ...]; listat painotuksista ja
-                      vinoumista.
-    :param rekursio: bool, sallitaanko arvon muodostuksen rekursio.
+    :param x: [int/float, ...], vektori lasketuista pelitilanteeseen
+              vaikuttavista arvoista.
+    :param muuttujat: [float, ...], painotukset ja vinouma.
     :return: int/float, pelitilanteen arvo lukuna.
     """
 
-    voittaja = pelilauta.voittaja()
-    if voittaja == "valkoinen":
-        return 1
-
-    if voittaja == "musta":
-        return -1
-
-    puolten_kaikki_siirrot = (pelilauta.puolen_kaikki_siirrot("valkoinen"),
-                              pelilauta.puolen_kaikki_siirrot("musta"))
-
-    asemat = pelilauta.asemat()
-
     arvo = 0
-    for indeksi in range(0, 64):
-        arvo += muodosta_ruudun_arvo(pelilauta, indeksi, muuttujat,
-                                     puolten_kaikki_siirrot, asemat)
+    for i in range(0, 5):
+        arvo += x[i] * muuttujat[i]
 
-    if rekursio:
-        uusi_arvo = 0
-
-        for _ in range(0, ARVIOINNIN_MAKSIMISYVYYS):
-            uusi_lauta = Teorialauta(pelilauta.siirtonumero(),
-                                     pelilauta.asemat(),
-                                     pelilauta.liikkumistiedot(),
-                                     pelilauta.shakit())
-
-            if uusi_lauta.siirtonumero() % 2 == 1:
-                sijainti, siirto, uusi_arvo = arvioi_paras_siirto(
-                    uusi_lauta, "valkoinen", muuttujat, False)
-
-            else:
-                sijainti, siirto, uusi_arvo = arvioi_paras_siirto(
-                    uusi_lauta, "musta", muuttujat, False)
-
-            uusi_lauta.tee_siirto(sijainti, siirto)
-            if uusi_lauta.voittaja() is not None:
-                break
-
-            pelilauta = uusi_lauta
-
-        arvo += 0.5 * uusi_arvo
+    # Lisätään vinouma
+    arvo += muuttujat[-1]
 
     # Vältetään arvon menemästä yli rajan kaikissa tilanteissa
     if arvo >= 1:
@@ -238,19 +246,25 @@ def arvioi_paras_siirto(pelilauta, puoli, muuttujat, rekursio=True):
 
                 uusi_lauta.tee_siirto(asema, indeksi)
 
-                arvo = muodosta_pelitilanteen_arvo(
-                    uusi_lauta, muuttujat, rekursio)
+                x = muodosta_koko_x(uusi_lauta, rekursio)
+
+                if uusi_lauta.voittaja() == "valkoinen":
+                    arvo = 1
+                elif uusi_lauta.voittaja() == "musta":
+                    arvo = -1
+                else:
+                    arvo = muodosta_pelitilanteen_arvo(muuttujat, x)
 
                 if puoli == "valkoinen" and arvo > paras_arvo:
-                    parhaat_siirrot = [[asema, indeksi, arvo]]
+                    parhaat_siirrot = [[asema, indeksi, x]]
                     paras_arvo = arvo
 
                 if puoli == "musta" and arvo < paras_arvo:
-                    parhaat_siirrot = [[asema, indeksi, arvo]]
+                    parhaat_siirrot = [[asema, indeksi, x]]
                     paras_arvo = arvo
 
                 if arvo == paras_arvo:
-                    parhaat_siirrot.append([asema, indeksi, arvo])
+                    parhaat_siirrot.append([asema, indeksi, x])
 
             siirrot[asema] >>= 1
             indeksi += 1
@@ -282,8 +296,7 @@ def alusta_muuttujat(tiedostonimi):
     for _ in range(0, 5):
         rivi += "{:.8f};".format(randint(5, 1000)*0.00000001)
 
-    for _ in range(5, 10):
-        rivi += "{:.8f};".format(randint(-100, 100)*0.00000001)
+    rivi += "{:.8f};".format(randint(-100, 100)*0.00000001)
 
     with open(tiedostonimi, "w") as tiedosto:
         tiedosto.write(rivi)
@@ -291,18 +304,18 @@ def alusta_muuttujat(tiedostonimi):
     return
 
 
-def keskiarvo_nelio_virhe(y, y_arvioidut):
+def keskiarvo_virhe(y, y_arvioidut):
     """
-    Tämä funktio laskee ja palauttaa neliöityjen virheiden keskiarvon.
+    Tämä funktio laskee ja palauttaa virheen keskiarvon.
 
     :param y: int, tavoitearvo.
     :param y_arvioidut: [float, ...], lista muodostetuista arvioista.
-    :return: float, neliöidyn virheen keskiarvo.
+    :return: float, virheen keskiarvo.
     """
 
     summa = 0
     for y_arvioitu in y_arvioidut:
-        summa += (y-y_arvioitu)**2
+        summa += y-y_arvioitu
 
     return summa/len(y_arvioidut)
 
@@ -316,9 +329,6 @@ def koulutus():
 
     tiedostonimi = "tulokset.txt"
     pelinumero = 1
-    suunta = 1
-
-    edellinen_virhe = 4
 
     while True:
 
@@ -330,6 +340,7 @@ def koulutus():
 
         pelilauta = Teorialauta()
         ennustukset = []
+        x_keskiarvo = []
 
         muuttujat = muuttujat_tiedostosta(tiedostonimi)
 
@@ -346,7 +357,7 @@ def koulutus():
             # print(siirtonumero)
 
             # Rajoitetaan pelin pituus sataan siirtoon
-            if siirtonumero == 100:
+            if siirtonumero == 200:
                 print("Tasapeli.")
                 break
 
@@ -354,33 +365,39 @@ def koulutus():
 
             # Arvioidaan vuorossa olevalle puolelle paras siirto
             if siirtonumero % 2 == 1:
-                sijainti, siirto, arvo = arvioi_paras_siirto(
+                sijainti, siirto, x = arvioi_paras_siirto(
                     pelilauta, "valkoinen", muuttujat, False)
 
                 if not siirto:
                     voittaja = "musta"
             else:
-                sijainti, siirto, arvo = arvioi_paras_siirto(
+                sijainti, siirto, x = arvioi_paras_siirto(
                     pelilauta, "musta", muuttujat, False)
 
                 if not siirto:
                     voittaja = "valkoinen"
 
             if siirto:
+                if not x_keskiarvo:
+                    x_keskiarvo = x
+                else:
+                    for i in range(0, 5):
+                        x_keskiarvo[i] = (x_keskiarvo[i] + x[i]) * 0.5
+
                 pelilauta.tee_siirto(sijainti, siirto)
                 voittaja = pelilauta.voittaja()
 
                 # Lisätään ennustuksiin uuden tilanteen ennustus
-                ennustukset.append(arvo)
+                ennustukset.append(muodosta_pelitilanteen_arvo(x, muuttujat))
 
             # Tarkistetaan, johtiko vuoro voittoon
             if voittaja:
 
                 if voittaja == "valkoinen":
-                    virhe = keskiarvo_nelio_virhe(1, ennustukset)
+                    virhe = keskiarvo_virhe(1, ennustukset)
 
                 else:
-                    virhe = keskiarvo_nelio_virhe(-1, ennustukset)
+                    virhe = keskiarvo_virhe(-1, ennustukset)
 
                 suoritusaika = time.time() - aloitusaika
 
@@ -392,64 +409,21 @@ def koulutus():
                       "s/siirto")
                 print("Virhe:", virhe)
 
-                # Yksinkertainen ja jokseenkin tehoton tapa päivittää
-                # painot ja vinoumat neliöidyn virheen keskiarvon avulla
-                # TÄYTYY VIELÄ KEHITTÄÄ
                 for i in range(0, 5):
+                    muuttujat[i] += OPPIMISNOPEUS*virhe*x_keskiarvo[i]
 
-                    # Jos virhe on kasvanut, vaihdetaan muutosten suuntaa
-                    if virhe > edellinen_virhe:
-                        if suunta == 1:
-                            suunta = -1
-                        else:
-                            suunta = 1
+                # jos virhe on yli 1, arviointi suosii liikaa jompaa kumpaa
+                # puolta
+                if abs(virhe) > 1:
+                    muuttujat[-1] += OPPIMISNOPEUS*virhe
 
-                    muuttujat[0][i] += (suunta * OPPIMISNOPEUS
-                                        * muuttujat[0][i] * virhe)
-
-                    # jos kerroin menisi nollaan, sillä ei ole tapaa enää
-                    # muuttua
-                    if muuttujat[0][i] < 0.00000001:
-                        muuttujat[0][i] += 0.00000005
-
-                    # jos virhe on yli 1, arviointi suosii liikaa jompaa
-                    # kumpaa puolta, mitä voi kontrolloida vinoumilla
-                    if virhe > 1:
-                        if (voittaja == "valkoinen" and muuttujat[1][i] >= 0) \
-                                or (voittaja == "musta" and muuttujat[1][i]
-                                    < 0):
-                            muuttujat[1][i] += (OPPIMISNOPEUS
-                                                * muuttujat[1][i] * virhe)
-
-                        if (voittaja == "musta" and muuttujat[1][i] >= 0) \
-                                or (voittaja == "valkoinen" and muuttujat[1][i]
-                                    < 0):
-                            muuttujat[1][i] -= (OPPIMISNOPEUS
-                                                * muuttujat[1][i] * virhe)
-
-                        # vinouma ei voi muuttaa etumerkkiään ilman tätä
-                        if muuttujat[1][i] > -0.00000005:
-                            if muuttujat[1][i] < -0.00000001:
-                                muuttujat[1][i] = -muuttujat[1][i]
-
-                            elif muuttujat[1][i] <= 0:
-                                muuttujat[1][i] = 0.00000005
-
-                            elif muuttujat[1][i] < 0.00000001:
-                                muuttujat[1][i] = -0.00000005
-
-                            elif muuttujat[1][i] < 0.00000005:
-                                muuttujat[1][i] = -muuttujat[1][i]
-
-                    # aletaan pienentämään vinoumia,
-                    # kun tarkkuus alkaa olla hyvällä mallilla
-                    elif virhe < 0.3:
-                        muuttujat[1][i] = muuttujat[1][i]/2
-
-                edellinen_virhe = virhe
+                # aletaan pienentämään vinoumaa,
+                # kun tarkkuus alkaa olemaan hyvällä mallilla
+                elif abs(virhe) < 0.3:
+                    muuttujat[-1] = muuttujat[-1] * 0.5
 
                 rivi = ""
-                for muuttuja in (muuttujat[0]+muuttujat[1]):
+                for muuttuja in muuttujat:
                     rivi += "{:.8f};".format(muuttuja)
 
                 with open(tiedostonimi, "w") as tiedosto:
