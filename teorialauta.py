@@ -144,12 +144,12 @@ class Teorialauta:
                 self.__asemat[1] |= (1 << 5)
 
             elif asema == 60 and siirto == 58:
-                self.__asemat[1] &= ~(1 << 56)
-                self.__asemat[1] |= (1 << 59)
+                self.__asemat[7] &= ~(1 << 56)
+                self.__asemat[7] |= (1 << 59)
 
             elif asema == 60 and siirto == 62:
-                self.__asemat[1] &= ~(1 << 63)
-                self.__asemat[1] |= (1 << 61)
+                self.__asemat[7] &= ~(1 << 63)
+                self.__asemat[7] |= (1 << 61)
 
             else:
                 self.__linnoittaminen = False
